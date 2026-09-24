@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek 翻译设置</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div class="brand-dot"></div>
+        <div>
+          <h1>DeepSeek 翻译设置</h1>
+          <p>配置 API 连接与默认翻译语言</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>DeepSeek API</h2>
+        <p class="description">
+          请在
+          <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">DeepSeek 开放平台</a>
+          创建 API Key。密钥只会保存在当前浏览器的本地存储中，不会同步到其他设备。
+        </p>
+
+        <label class="field">
+          <span class="field-label">API Key</span>
+          <div class="key-row">
+            <input id="apiKey" type="password" autocomplete="off" placeholder="sk-...">
+            <button id="toggleKeyButton" class="secondary-button" type="button">显示</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span class="field-label">模型</span>
+          <select id="model"></select>
+          <span class="field-help">网页翻译推荐使用 deepseek-chat，速度和费用更均衡。</span>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>翻译偏好</h2>
+        <label class="field">
+          <span class="field-label">默认目标语言</span>
+          <select id="targetLanguage"></select>
+          <span class="field-help">划词翻译和网页翻译默认使用该语言。</span>
+        </label>
+      </section>
+
+      <div class="actions">
+        <button id="saveButton" class="primary-button" type="button">保存设置</button>
+        <button id="testButton" class="secondary-button" type="button">保存并测试连接</button>
+      </div>
+
+      <p id="statusText" class="status-text" role="status"></p>
+
+      <section class="tips">
+        <h2>使用方法</h2>
+        <ul>
+          <li>在网页中选中文字，点击蓝色“翻译”按钮。</li>
+          <li>点击浏览器工具栏中的扩展图标，可翻译整个网页或快速翻译文字。</li>
+          <li>按 <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> 可翻译或恢复当前网页。</li>
+          <li>网页翻译会调用 DeepSeek API，并按照开放平台的实际用量计费。</li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

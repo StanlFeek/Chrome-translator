@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek 翻译</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <div>
+            <h1>DeepSeek 翻译</h1>
+            <p>智能划词与网页翻译</p>
+          </div>
+        </div>
+        <button id="settingsButton" class="icon-button" type="button" title="设置">⚙</button>
+      </header>
+
+      <div id="keyWarning" class="notice warning" hidden>
+        <span>尚未配置 DeepSeek API Key。</span>
+        <button id="noticeSettingsButton" type="button">去设置</button>
+      </div>
+
+      <label class="field">
+        <span class="field-label">目标语言</span>
+        <select id="targetLanguage"></select>
+      </label>
+
+      <section class="card">
+        <div class="card-title-row">
+          <div>
+            <h2>当前网页</h2>
+            <p>整页内容会分批交给 DeepSeek 翻译</p>
+          </div>
+          <span id="pageState" class="state">未翻译</span>
+        </div>
+        <div class="button-row">
+          <button id="translatePageButton" class="primary-button" type="button">翻译整个网页</button>
+          <button id="restorePageButton" class="secondary-button" type="button">恢复原文</button>
+        </div>
+      </section>
+
+      <section class="translate-card">
+        <label class="field-label" for="sourceText">快速翻译</label>
+        <textarea id="sourceText" rows="4" placeholder="输入或粘贴要翻译的文字…"></textarea>
+        <div class="quick-actions">
+          <span class="hint">Ctrl + Enter 翻译</span>
+          <button id="quickTranslateButton" class="primary-button compact" type="button">翻译</button>
+        </div>
+        <div id="quickResultBox" class="result-box" hidden>
+          <div class="result-header">
+            <span>译文</span>
+            <button id="copyButton" class="text-button" type="button">复制</button>
+          </div>
+          <p id="quickResult" class="result"></p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <span id="statusText" class="status-text">就绪</span>
+        <span class="privacy">API Key 仅保存在本机</span>
+      </footer>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
