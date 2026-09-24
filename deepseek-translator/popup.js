@@ -13,6 +13,7 @@ const elements = {
   quickResultBox: document.querySelector("#quickResultBox"),
   quickResult: document.querySelector("#quickResult"),
   copyButton: document.querySelector("#copyButton"),
+  realtimeToggle: document.querySelector("#realtimeToggle"),
   statusText: document.querySelector("#statusText")
 };
 
@@ -22,6 +23,7 @@ async function initialize() {
   populateLanguages();
   const settings = await getSettings();
   elements.targetLanguage.value = settings.targetLanguage;
+  elements.realtimeToggle.checked = Boolean(settings.realtimeTranslation);
   elements.keyWarning.hidden = Boolean(settings.apiKey);
 
   elements.settingsButton.addEventListener("click", openOptions);
@@ -34,6 +36,7 @@ async function initialize() {
   elements.restorePageButton.addEventListener("click", restoreCurrentPage);
   elements.quickTranslateButton.addEventListener("click", quickTranslate);
   elements.copyButton.addEventListener("click", copyQuickResult);
+  elements.realtimeToggle.addEventListener("change", toggleRealtimeTranslation);
   elements.sourceText.addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
@@ -63,7 +66,12 @@ async function checkPageState() {
   try {
     const response = await sendToActiveTab({ type: "GET_PAGE_STATE" });
     const translatedCount = Number(response.translatedCount || 0);
-    elements.pageState.textContent = translatedCount ? `已翻译 ${translatedCount} 处` : "未翻译";
+    elements.realtimeToggle.checked = Boolean(response.realtimeEnabled);
+    elements.pageState.textContent = response.realtimeEnabled
+      ? "实时翻译中"
+      : translatedCount
+        ? `已翻译 ${translatedCount} 处`
+        : "未翻译";
     elements.restorePageButton.disabled = !translatedCount;
   } catch (_error) {
     elements.pageState.textContent = "不可用";
@@ -86,6 +94,22 @@ async function translateCurrentPage() {
     setStatus(formatError(error), true);
   } finally {
     elements.translatePageButton.disabled = false;
+  }
+}
+
+async function toggleRealtimeTranslation() {
+  const enabled = elements.realtimeToggle.checked;
+  await saveSettings({ realtimeTranslation: enabled });
+  setStatus(enabled ? "实时翻译已开启。" : "实时翻译已关闭。");
+
+  try {
+    await sendToActiveTab({
+      type: "SET_REALTIME_TRANSLATION",
+      enabled
+    });
+    await checkPageState();
+  } catch (error) {
+    setStatus(formatError(error), true);
   }
 }
 

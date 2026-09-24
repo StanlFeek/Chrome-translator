@@ -214,12 +214,67 @@ textarea:focus {
 .result.error { color: #b42318; }
 
 .footer {
-  min-height: 24px;
+  min-height: 28px;
   gap: 12px;
   color: #7a879a;
   font-size: 10px;
 }
 
-.status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.realtime-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  user-select: none;
+}
+
+.realtime-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background .18s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .25);
+  transition: transform .18s ease;
+}
+
+.realtime-input:checked + .switch-track { background: #1769e0; }
+.realtime-input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.realtime-input:focus-visible + .switch-track { box-shadow: 0 0 0 3px rgba(23, 105, 224, .18); }
+
+.status-text {
+  min-height: 16px;
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: #7a879a;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-text.error { color: #b42318; }
 .privacy { flex: 0 0 auto; }

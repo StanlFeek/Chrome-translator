@@ -60,6 +60,7 @@ const messageHandlers = {
     return {
       targetLanguage: settings.targetLanguage,
       model: settings.model,
+      realtimeTranslation: Boolean(settings.realtimeTranslation),
       hasApiKey: Boolean(settings.apiKey)
     };
   },

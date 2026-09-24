@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DeepSeek 翻译",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "使用 DeepSeek API 进行划词翻译和网页翻译。",
   "minimum_chrome_version": "102",
   "permissions": [

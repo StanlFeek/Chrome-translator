@@ -16,6 +16,7 @@ A Chrome Manifest V3 translation extension that provides selection and full-page
 - 翻译整个网页，并在页面右下角显示进度
 - 一键恢复网页原文
 - 在扩展弹窗中快速翻译输入的文字
+- 在弹窗底部开启或关闭实时翻译
 - 右键菜单翻译选中文字或当前页面
 - 快捷键 `Alt + Shift + T` 翻译或恢复当前网页
 - 支持简体中文、繁体中文、英语、日语、韩语、法语、德语、西班牙语、俄语
@@ -52,6 +53,7 @@ A Chrome Manifest V3 translation extension that provides selection and full-page
 - API Key 保存在 `chrome.storage.local`，不会同步到其他 Chrome 设备，也不会发送给 DeepSeek 之外的第三方。
 - 待翻译文字会发送到 `https://api.deepseek.com/chat/completions` 以完成翻译。
 - 翻译会消耗 DeepSeek API 用量，请以 DeepSeek 开放平台的实际计费规则为准。
+- 实时翻译开启后会持续处理当前页面及后续新增内容，可能产生更多 API 用量。
 - 扩展会跳过 `script`、`style`、输入框、代码块、`translate="no"` 和隐藏区域。
 
 ### 开发
@@ -83,6 +85,7 @@ A Chrome Manifest V3 translation extension that provides selection and full-page
 - Translate an entire page and show progress at the bottom-right
 - Restore the original page text with one click
 - Translate typed text quickly from the extension popup
+- Turn real-time translation on or off from the popup footer
 - Translate selected text or the current page from the context menu
 - Use `Alt + Shift + T` to translate or restore the current page
 - Support Simplified Chinese, Traditional Chinese, English, Japanese, Korean, French, German, Spanish, and Russian
@@ -119,6 +122,7 @@ You can also press `Alt + Shift + T`, or right-click on a blank area of the page
 - The API key is stored in `chrome.storage.local`, is not synced to other Chrome devices, and is not sent to any third party other than DeepSeek.
 - Text to be translated is sent to `https://api.deepseek.com/chat/completions`.
 - Translation consumes DeepSeek API usage. Refer to the DeepSeek platform for current pricing and billing rules.
+- Real-time translation processes the current page and newly added content while enabled, which may use more API credits.
 - The extension skips `script`, `style`, input fields, code blocks, `translate="no"` elements, and hidden areas.
 
 ### Development

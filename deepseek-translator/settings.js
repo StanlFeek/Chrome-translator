@@ -18,7 +18,8 @@ export const MODEL_OPTIONS = [
 export const DEFAULT_SETTINGS = Object.freeze({
   apiKey: "",
   model: "deepseek-chat",
-  targetLanguage: "zh-CN"
+  targetLanguage: "zh-CN",
+  realtimeTranslation: false
 });
 
 export function languageLabel(value) {

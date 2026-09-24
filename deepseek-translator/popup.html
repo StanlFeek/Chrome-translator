@@ -60,9 +60,16 @@
       </section>
 
       <footer class="footer">
-        <span id="statusText" class="status-text">就绪</span>
+        <label class="realtime-control" title="开启后自动翻译当前页面和后续新增内容">
+          <input id="realtimeToggle" class="realtime-input" type="checkbox">
+          <span class="switch-track" aria-hidden="true">
+            <span class="switch-thumb"></span>
+          </span>
+          <span>实时翻译</span>
+        </label>
         <span class="privacy">API Key 仅保存在本机</span>
       </footer>
+      <p id="statusText" class="status-text">就绪</p>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

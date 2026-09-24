@@ -14,6 +14,7 @@
 - 翻译整个网页，并显示翻译进度
 - 一键恢复网页原文
 - 在扩展弹窗中快速翻译输入文字
+- 在弹窗底部开启或关闭实时翻译
 - 支持右键菜单和 `Alt + Shift + T` 快捷键
 - API Key 仅保存在浏览器本地存储中
 
@@ -62,6 +63,7 @@ A Chrome Manifest V3 translation extension that uses the DeepSeek API for select
 - Translate a full web page with progress reporting
 - Restore the original page text with one click
 - Translate typed text quickly from the extension popup
+- Turn real-time translation on or off from the popup footer
 - Support the context menu and the `Alt + Shift + T` shortcut
 - Store the API key only in local browser storage
 

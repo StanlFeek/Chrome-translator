@@ -30,9 +30,15 @@
 
   const ui = createUi();
   const translatedNodes = new Map();
+  const managedTextNodes = new WeakSet();
   let pageTranslationInProgress = false;
   let cancelPageTranslation = false;
   let panelAnchorRect = null;
+  let nextTranslationId = 1;
+  let realtimeEnabled = false;
+  let realtimeObserver = null;
+  let realtimeScanTimer = null;
+  let realtimeScanQueued = false;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const handler = messageHandlers[message?.type];
@@ -57,8 +63,26 @@
     }
   });
 
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local" || !changes.realtimeTranslation) {
+      return;
+    }
+    if (changes.realtimeTranslation.newValue) {
+      void enableRealtime();
+    } else {
+      void disableRealtime();
+    }
+  });
+
+  void initializeRealtimeMode();
+
   const messageHandlers = {
     PING: () => ({ ready: true }),
+
+    SET_REALTIME_TRANSLATION: ({ enabled }) => {
+      void (enabled ? enableRealtime() : disableRealtime());
+      return { enabled: Boolean(enabled) };
+    },
 
     TRANSLATE_SELECTION: async ({ text, targetLanguage }) => {
       const normalizedText = String(text || "").trim();
@@ -75,17 +99,28 @@
       return { translatedCount: translatedNodes.size };
     },
 
-    RESTORE_PAGE: () => {
-      restorePage();
+    RESTORE_PAGE: async () => {
+      if (realtimeEnabled) {
+        await chrome.storage.local.set({ realtimeTranslation: false });
+        await disableRealtime();
+      } else {
+        restorePage();
+      }
       return { translatedCount: 0 };
     },
 
     GET_PAGE_STATE: () => ({
       translatedCount: translatedNodes.size,
-      isTranslating: pageTranslationInProgress
+      isTranslating: pageTranslationInProgress,
+      realtimeEnabled
     }),
 
     TOGGLE_PAGE_TRANSLATION: async () => {
+      if (realtimeEnabled) {
+        await chrome.storage.local.set({ realtimeTranslation: false });
+        await disableRealtime();
+        return { state: "restored" };
+      }
       if (translatedNodes.size) {
         restorePage();
         return { state: "restored" };
@@ -535,57 +570,165 @@
     }
   }
 
-  async function translatePage(providedTargetLanguage) {
-    if (pageTranslationInProgress) {
-      showStatus("正在翻译当前页面…");
+  async function initializeRealtimeMode() {
+    try {
+      const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+      if (settings.realtimeTranslation) {
+        await enableRealtime();
+      }
+    } catch (_error) {
+      // The page may be closing or the extension may have been reloaded.
+    }
+  }
+
+  async function enableRealtime() {
+    if (realtimeEnabled) {
       return;
     }
 
+    realtimeEnabled = true;
+    startRealtimeObserver();
+    await runRealtimeScan();
+  }
+
+  async function disableRealtime() {
+    if (!realtimeEnabled) {
+      return;
+    }
+
+    realtimeEnabled = false;
+    realtimeScanQueued = false;
+    cancelPageTranslation = true;
+
+    if (realtimeScanTimer) {
+      clearTimeout(realtimeScanTimer);
+      realtimeScanTimer = null;
+    }
+    realtimeObserver?.disconnect();
+    realtimeObserver = null;
+
     if (translatedNodes.size) {
-      showStatus("当前页面已翻译。", {
-        actionLabel: "恢复原文",
-        action: restorePage
+      restorePage({ silent: true });
+      showStatus("实时翻译已关闭，已恢复原文。", { closeable: true });
+    } else {
+      showStatus("实时翻译已关闭。", { closeable: true });
+    }
+    window.setTimeout(hideStatus, 1500);
+  }
+
+  function startRealtimeObserver() {
+    if (realtimeObserver || !document.body) {
+      return;
+    }
+
+    realtimeObserver = new MutationObserver(scheduleRealtimeScan);
+    realtimeObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  }
+
+  function scheduleRealtimeScan() {
+    if (!realtimeEnabled) {
+      return;
+    }
+    if (realtimeScanTimer) {
+      clearTimeout(realtimeScanTimer);
+    }
+    realtimeScanTimer = window.setTimeout(() => {
+      realtimeScanTimer = null;
+      void runRealtimeScan();
+    }, 800);
+  }
+
+  async function runRealtimeScan() {
+    if (!realtimeEnabled) {
+      return;
+    }
+    if (pageTranslationInProgress) {
+      realtimeScanQueued = true;
+      return;
+    }
+
+    const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+    if (!realtimeEnabled || !settings.realtimeTranslation) {
+      return;
+    }
+    if (!settings.hasApiKey) {
+      showStatus("请先打开扩展设置，填写 DeepSeek API Key。", {
+        error: true,
+        closeable: true,
+        actionLabel: "打开设置",
+        action: openOptionsPage
       });
       return;
     }
 
-    let targetLanguage = providedTargetLanguage;
-    if (!targetLanguage) {
-      const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
-      targetLanguage = settings.targetLanguage;
-      if (!settings.hasApiKey) {
-        showStatus("请先打开扩展设置，填写 DeepSeek API Key。", {
-          error: true,
-          closeable: true,
-          actionLabel: "打开设置",
-          action: openOptionsPage
-        });
-        return;
-      }
+    currentPageTargetLanguage = settings.targetLanguage;
+    const records = collectPageRecords({ excludeManaged: true });
+    if (!records.length) {
+      return;
     }
 
+    await translateRecords(records, settings.targetLanguage, { realtime: true });
+  }
+
+  async function translatePage(providedTargetLanguage) {
+    if (pageTranslationInProgress) {
+      showStatus(realtimeEnabled ? "正在实时翻译当前页面…" : "正在翻译当前页面…");
+      return;
+    }
+
+    const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+    if (!settings.hasApiKey) {
+      showStatus("请先打开扩展设置，填写 DeepSeek API Key。", {
+        error: true,
+        closeable: true,
+        actionLabel: "打开设置",
+        action: openOptionsPage
+      });
+      return;
+    }
+
+    const targetLanguage = providedTargetLanguage || settings.targetLanguage;
     currentPageTargetLanguage = targetLanguage;
-    const records = collectPageRecords();
+    const records = collectPageRecords({ excludeManaged: true });
     if (!records.length) {
-      showStatus("当前页面没有找到适合翻译的文字。", { closeable: true });
+      showStatus(translatedNodes.size ? "当前页面已翻译。" : "当前页面没有找到适合翻译的文字。", {
+        actionLabel: translatedNodes.size ? "恢复原文" : "",
+        action: restorePage,
+        closeable: true
+      });
+      return;
+    }
+
+    await translateRecords(records, targetLanguage);
+  }
+
+  async function translateRecords(records, targetLanguage, options = {}) {
+    const isRealtime = Boolean(options.realtime);
+    if (pageTranslationInProgress) {
+      if (isRealtime) {
+        realtimeScanQueued = true;
+      }
       return;
     }
 
     pageTranslationInProgress = true;
     cancelPageTranslation = false;
-    showStatus("正在准备网页翻译…", {
-      actionLabel: "停止",
-      action: () => {
-        cancelPageTranslation = true;
-        ui.statusAction.disabled = true;
-        ui.statusMessage.textContent = "正在停止…";
-      }
+    showStatus(isRealtime ? "正在实时翻译…" : "正在准备网页翻译…", {
+      actionLabel: isRealtime ? "关闭实时" : "停止",
+      action: isRealtime ? disableRealtime : stopCurrentTranslation
     });
 
     let processed = 0;
+    let wasCancelled = false;
+
     try {
       for (const batch of createBatches(records)) {
         if (cancelPageTranslation) {
+          wasCancelled = true;
           break;
         }
 
@@ -595,18 +738,29 @@
           targetLanguage
         });
 
+        if (cancelPageTranslation) {
+          wasCancelled = true;
+          break;
+        }
+
         const translations = new Map(
           response.translations.map((item) => [Number(item.id), item.text])
         );
 
         for (const record of batch) {
           const translation = translations.get(record.id);
-          if (typeof translation !== "string" || !translation.trim()) {
+          if (
+            typeof translation !== "string" ||
+            !translation.trim() ||
+            !record.node.isConnected ||
+            record.node.nodeValue !== record.originalValue
+          ) {
             continue;
           }
 
           const translatedValue = `${record.leading}${translation}${record.trailing}`;
           record.node.nodeValue = translatedValue;
+          managedTextNodes.add(record.node);
           translatedNodes.set(record.id, {
             node: record.node,
             originalValue: record.originalValue,
@@ -616,50 +770,69 @@
         }
 
         const percent = Math.min(100, Math.round((processed / records.length) * 100));
-        showStatus(`正在翻译网页：${percent}%`, {
-          actionLabel: "停止",
-          action: () => {
-            cancelPageTranslation = true;
-            ui.statusAction.disabled = true;
-            ui.statusMessage.textContent = "正在停止…";
-          }
+        showStatus(isRealtime ? `实时翻译：${percent}%` : `正在翻译网页：${percent}%`, {
+          actionLabel: isRealtime ? "关闭实时" : "停止",
+          action: isRealtime ? disableRealtime : stopCurrentTranslation
         });
       }
-
-      pageTranslationInProgress = false;
-
-      if (cancelPageTranslation) {
-        showStatus(`翻译已停止，已翻译 ${translatedNodes.size} 处内容。`, {
-          actionLabel: translatedNodes.size ? "恢复原文" : "",
-          action: restorePage,
-          closeable: true
-        });
-        return;
-      }
-
-      showStatus(`网页翻译完成，共处理 ${translatedNodes.size} 处内容。`, {
-        actionLabel: "恢复原文",
-        action: restorePage,
-        closeable: true
-      });
     } catch (error) {
-      pageTranslationInProgress = false;
-      showStatus(`翻译中断：${formatError(error)}`, {
+      showStatus(`${isRealtime ? "实时翻译中断" : "翻译中断"}：${formatError(error)}`, {
         error: true,
         actionLabel: translatedNodes.size ? "恢复原文" : "打开设置",
         action: translatedNodes.size ? restorePage : openOptionsPage,
         closeable: true
       });
+      return;
+    } finally {
+      pageTranslationInProgress = false;
+      if (isRealtime && realtimeEnabled && realtimeScanQueued) {
+        realtimeScanQueued = false;
+        scheduleRealtimeScan();
+      }
     }
+
+    if (wasCancelled) {
+      if (!isRealtime) {
+        showStatus(`翻译已停止，已翻译 ${translatedNodes.size} 处内容。`, {
+          actionLabel: translatedNodes.size ? "恢复原文" : "",
+          action: restorePage,
+          closeable: true
+        });
+      }
+      return;
+    }
+
+    if (isRealtime) {
+      if (realtimeEnabled) {
+        showStatus(`实时翻译已开启，共处理 ${translatedNodes.size} 处内容。`, {
+          actionLabel: "关闭实时",
+          action: disableRealtime,
+          closeable: true
+        });
+        window.setTimeout(hideStatus, 1500);
+      }
+      return;
+    }
+
+    showStatus(`网页翻译完成，共处理 ${translatedNodes.size} 处内容。`, {
+      actionLabel: "恢复原文",
+      action: restorePage,
+      closeable: true
+    });
   }
 
-  function collectPageRecords() {
+  function stopCurrentTranslation() {
+    cancelPageTranslation = true;
+    ui.statusAction.disabled = true;
+    ui.statusMessage.textContent = "正在停止…";
+  }
+
+  function collectPageRecords(options = {}) {
     if (!document.body) {
       return [];
     }
 
     const records = [];
-    let nextId = 1;
     const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
@@ -669,6 +842,9 @@
           const text = originalValue.trim();
           const parent = node.parentElement;
 
+          if (options.excludeManaged && managedTextNodes.has(node)) {
+            return NodeFilter.FILTER_REJECT;
+          }
           if (!text || text.length < 2 || text.length > MAX_PAGE_NODE_LENGTH || !parent) {
             return NodeFilter.FILTER_REJECT;
           }
@@ -695,7 +871,14 @@
       const text = originalValue.trim();
       const leading = originalValue.match(/^\s*/)?.[0] || "";
       const trailing = originalValue.match(/\s*$/)?.[0] || "";
-      records.push({ id: nextId++, node, originalValue, leading, trailing, text });
+      records.push({
+        id: nextTranslationId++,
+        node,
+        originalValue,
+        leading,
+        trailing,
+        text
+      });
     }
 
     return records;
@@ -751,15 +934,21 @@
     return style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0;
   }
 
-  function restorePage() {
+  function restorePage(options = {}) {
     for (const item of translatedNodes.values()) {
       if (item.node?.isConnected && item.node.nodeValue === item.translatedValue) {
         item.node.nodeValue = item.originalValue;
       }
+      if (item.node) {
+        managedTextNodes.delete(item.node);
+      }
     }
     translatedNodes.clear();
-    showStatus("已恢复网页原文。", { closeable: true });
-    window.setTimeout(hideStatus, 1800);
+
+    if (!options.silent) {
+      showStatus("已恢复网页原文。", { closeable: true });
+      window.setTimeout(hideStatus, 1800);
+    }
   }
 
   function showStatus(message, options = {}) {
