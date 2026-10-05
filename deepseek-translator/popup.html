@@ -41,6 +41,7 @@
           <button id="translatePageButton" class="primary-button" type="button">翻译整个网页</button>
           <button id="restorePageButton" class="secondary-button" type="button">恢复原文</button>
         </div>
+        <button id="applyCacheButton" class="secondary-button cache-button" type="button" hidden>使用缓存翻译</button>
       </section>
 
       <section class="translate-card">
@@ -60,13 +61,22 @@
       </section>
 
       <footer class="footer">
-        <label class="realtime-control" title="开启后自动翻译当前页面和后续新增内容">
-          <input id="realtimeToggle" class="realtime-input" type="checkbox">
-          <span class="switch-track" aria-hidden="true">
-            <span class="switch-thumb"></span>
-          </span>
-          <span>实时翻译</span>
-        </label>
+        <div class="footer-controls">
+          <label class="realtime-control" title="开启后自动翻译当前页面和后续新增内容">
+            <input id="realtimeToggle" class="realtime-input" type="checkbox">
+            <span class="switch-track" aria-hidden="true">
+              <span class="switch-thumb"></span>
+            </span>
+            <span>实时翻译</span>
+          </label>
+          <label class="realtime-control" title="开启后，相同网页会自动显示本地保存的译文">
+            <input id="pageCacheToggle" class="realtime-input" type="checkbox">
+            <span class="switch-track" aria-hidden="true">
+              <span class="switch-thumb"></span>
+            </span>
+            <span>自动显示缓存</span>
+          </label>
+        </div>
         <span class="privacy">API Key 仅保存在本机</span>
       </footer>
       <p id="statusText" class="status-text">就绪</p>

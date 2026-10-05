@@ -19,7 +19,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   apiKey: "",
   model: "deepseek-chat",
   targetLanguage: "zh-CN",
-  realtimeTranslation: false
+  realtimeTranslation: false,
+  pageCacheAutoApply: false
 });
 
 export function languageLabel(value) {

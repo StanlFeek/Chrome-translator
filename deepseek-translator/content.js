@@ -64,17 +64,18 @@
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !changes.realtimeTranslation) {
+    if (areaName !== "local") {
       return;
     }
-    if (changes.realtimeTranslation.newValue) {
-      void enableRealtime();
-    } else {
-      void disableRealtime();
+    if (changes.realtimeTranslation) {
+      void (changes.realtimeTranslation.newValue ? enableRealtime() : disableRealtime());
+    }
+    if (changes.pageCacheAutoApply?.newValue) {
+      void applyPageCache({ silent: true });
     }
   });
 
-  void initializeRealtimeMode();
+  void initializeAutomaticTranslation();
 
   const messageHandlers = {
     PING: () => ({ ready: true }),
@@ -83,6 +84,10 @@
       void (enabled ? enableRealtime() : disableRealtime());
       return { enabled: Boolean(enabled) };
     },
+
+    APPLY_PAGE_CACHE: async () => ({
+      appliedCount: await applyPageCache()
+    }),
 
     TRANSLATE_SELECTION: async ({ text, targetLanguage }) => {
       const normalizedText = String(text || "").trim();
@@ -109,11 +114,16 @@
       return { translatedCount: 0 };
     },
 
-    GET_PAGE_STATE: () => ({
-      translatedCount: translatedNodes.size,
-      isTranslating: pageTranslationInProgress,
-      realtimeEnabled
-    }),
+    GET_PAGE_STATE: async () => {
+      const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+      return {
+        translatedCount: translatedNodes.size,
+        isTranslating: pageTranslationInProgress,
+        realtimeEnabled,
+        cacheAutoApply: Boolean(settings.pageCacheAutoApply),
+        cacheCount: await getPageCacheCount(settings.targetLanguage)
+      };
+    },
 
     TOGGLE_PAGE_TRANSLATION: async () => {
       if (realtimeEnabled) {
@@ -570,14 +580,143 @@
     }
   }
 
-  async function initializeRealtimeMode() {
+  async function initializeAutomaticTranslation() {
     try {
       const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+      if (settings.pageCacheAutoApply) {
+        await applyPageCache({ silent: true });
+      }
       if (settings.realtimeTranslation) {
         await enableRealtime();
       }
     } catch (_error) {
       // The page may be closing or the extension may have been reloaded.
+    }
+  }
+
+  function normalizePageUrl(rawUrl = location.href) {
+    try {
+      const url = new URL(rawUrl);
+      url.hash = "";
+      return url.href;
+    } catch (_error) {
+      return String(rawUrl).split("#")[0];
+    }
+  }
+
+  function getPageCacheStorageKey(targetLanguage, rawUrl = location.href) {
+    return `pageTranslationCache:${encodeURIComponent(normalizePageUrl(rawUrl))}::${targetLanguage}`;
+  }
+
+  async function loadPageCache(targetLanguage, rawUrl = location.href) {
+    const key = getPageCacheStorageKey(targetLanguage, rawUrl);
+    const stored = await chrome.storage.local.get(key);
+    const cache = stored[key];
+    if (!cache || cache.version !== 1 || cache.targetLanguage !== targetLanguage) {
+      return null;
+    }
+    return { ...cache, key };
+  }
+
+  async function savePageCacheEntries(entries, targetLanguage, rawUrl = location.href) {
+    const validEntries = (Array.isArray(entries) ? entries : []).filter(
+      (item) => item?.source && item?.translation
+    );
+    if (!validEntries.length) {
+      return;
+    }
+
+    try {
+      const key = getPageCacheStorageKey(targetLanguage, rawUrl);
+      const existing = await loadPageCache(targetLanguage, rawUrl);
+      const segments = new Map(
+        (existing?.segments || []).map((item) => [item.source, item.translation])
+      );
+
+      for (const item of validEntries) {
+        segments.set(item.source, item.translation);
+      }
+
+      await chrome.storage.local.set({
+        [key]: {
+          version: 1,
+          url: normalizePageUrl(rawUrl),
+          targetLanguage,
+          updatedAt: Date.now(),
+          segments: [...segments].map(([source, translation]) => ({ source, translation }))
+        }
+      });
+    } catch (error) {
+      console.warn("[DeepSeek 翻译] 保存页面缓存失败", error);
+    }
+  }
+
+  async function getPageCacheCount(targetLanguage) {
+    try {
+      const cache = await loadPageCache(targetLanguage);
+      return cache?.segments?.length || 0;
+    } catch (_error) {
+      return 0;
+    }
+  }
+
+  async function applyPageCache(options = {}) {
+    if (pageTranslationInProgress) {
+      if (!options.silent) {
+        showStatus("当前页面正在处理翻译，请稍后再试。", { closeable: true });
+      }
+      return 0;
+    }
+
+    const settings = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+    currentPageTargetLanguage = settings.targetLanguage;
+    const records = collectPageRecords({ excludeManaged: true });
+    if (!records.length) {
+      if (!options.silent) {
+        showStatus("没有可用于当前页面的缓存。", { closeable: true });
+      }
+      return 0;
+    }
+
+    pageTranslationInProgress = true;
+    try {
+      const cache = await loadPageCache(settings.targetLanguage);
+      const translations = new Map(
+        (cache?.segments || []).map((item) => [item.source, item.translation])
+      );
+      let appliedCount = 0;
+
+      for (const record of records) {
+        const translation = translations.get(record.text);
+        if (
+          typeof translation !== "string" ||
+          !translation.trim() ||
+          !record.node.isConnected ||
+          record.node.nodeValue !== record.originalValue
+        ) {
+          continue;
+        }
+
+        const translatedValue = `${record.leading}${translation}${record.trailing}`;
+        record.node.nodeValue = translatedValue;
+        managedTextNodes.add(record.node);
+        translatedNodes.set(record.id, {
+          node: record.node,
+          originalValue: record.originalValue,
+          translatedValue
+        });
+        appliedCount += 1;
+      }
+
+      if (appliedCount) {
+        showStatus(`已从本地缓存显示 ${appliedCount} 处译文。`, { closeable: true });
+        window.setTimeout(hideStatus, 1800);
+      } else if (!options.silent) {
+        showStatus("没有可用于当前页面的缓存。", { closeable: true });
+      }
+      return appliedCount;
+    } finally {
+      pageTranslationInProgress = false;
     }
   }
 
@@ -717,6 +856,7 @@
 
     pageTranslationInProgress = true;
     cancelPageTranslation = false;
+    const cachePageUrl = normalizePageUrl();
     showStatus(isRealtime ? "正在实时翻译…" : "正在准备网页翻译…", {
       actionLabel: isRealtime ? "关闭实时" : "停止",
       action: isRealtime ? disableRealtime : stopCurrentTranslation
@@ -724,6 +864,7 @@
 
     let processed = 0;
     let wasCancelled = false;
+    const cacheEntries = [];
 
     try {
       for (const batch of createBatches(records)) {
@@ -766,6 +907,7 @@
             originalValue: record.originalValue,
             translatedValue
           });
+          cacheEntries.push({ source: record.text, translation });
           processed += 1;
         }
 
@@ -784,6 +926,9 @@
       });
       return;
     } finally {
+      if (cacheEntries.length) {
+        await savePageCacheEntries(cacheEntries, targetLanguage, cachePageUrl);
+      }
       pageTranslationInProgress = false;
       if (isRealtime && realtimeEnabled && realtimeScanQueued) {
         realtimeScanQueued = false;

@@ -61,6 +61,7 @@ const messageHandlers = {
       targetLanguage: settings.targetLanguage,
       model: settings.model,
       realtimeTranslation: Boolean(settings.realtimeTranslation),
+      pageCacheAutoApply: Boolean(settings.pageCacheAutoApply),
       hasApiKey: Boolean(settings.apiKey)
     };
   },

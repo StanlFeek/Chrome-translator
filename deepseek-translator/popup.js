@@ -14,6 +14,8 @@ const elements = {
   quickResult: document.querySelector("#quickResult"),
   copyButton: document.querySelector("#copyButton"),
   realtimeToggle: document.querySelector("#realtimeToggle"),
+  pageCacheToggle: document.querySelector("#pageCacheToggle"),
+  applyCacheButton: document.querySelector("#applyCacheButton"),
   statusText: document.querySelector("#statusText")
 };
 
@@ -24,6 +26,7 @@ async function initialize() {
   const settings = await getSettings();
   elements.targetLanguage.value = settings.targetLanguage;
   elements.realtimeToggle.checked = Boolean(settings.realtimeTranslation);
+  elements.pageCacheToggle.checked = Boolean(settings.pageCacheAutoApply);
   elements.keyWarning.hidden = Boolean(settings.apiKey);
 
   elements.settingsButton.addEventListener("click", openOptions);
@@ -37,6 +40,8 @@ async function initialize() {
   elements.quickTranslateButton.addEventListener("click", quickTranslate);
   elements.copyButton.addEventListener("click", copyQuickResult);
   elements.realtimeToggle.addEventListener("change", toggleRealtimeTranslation);
+  elements.pageCacheToggle.addEventListener("change", togglePageCache);
+  elements.applyCacheButton.addEventListener("click", applyCachedTranslation);
   elements.sourceText.addEventListener("keydown", (event) => {
     if (event.ctrlKey && event.key === "Enter") {
       event.preventDefault();
@@ -73,6 +78,10 @@ async function checkPageState() {
         ? `已翻译 ${translatedCount} 处`
         : "未翻译";
     elements.restorePageButton.disabled = !translatedCount;
+    const cacheCount = Number(response.cacheCount || 0);
+    elements.applyCacheButton.hidden =
+      Boolean(response.cacheAutoApply) || !cacheCount || translatedCount > 0;
+    elements.applyCacheButton.textContent = `使用缓存翻译（${cacheCount} 处）`;
   } catch (_error) {
     elements.pageState.textContent = "不可用";
     elements.restorePageButton.disabled = true;
@@ -110,6 +119,41 @@ async function toggleRealtimeTranslation() {
     await checkPageState();
   } catch (error) {
     setStatus(formatError(error), true);
+  }
+}
+
+async function togglePageCache() {
+  const enabled = elements.pageCacheToggle.checked;
+  await saveSettings({ pageCacheAutoApply: enabled });
+  setStatus(enabled ? "已开启自动显示缓存翻译。" : "已关闭自动显示缓存翻译。");
+
+  if (enabled) {
+    try {
+      const response = await sendToActiveTab({ type: "APPLY_PAGE_CACHE" });
+      const count = Number(response.appliedCount || 0);
+      if (count) {
+        setStatus(`已从本地缓存显示 ${count} 处译文。`);
+      }
+    } catch (error) {
+      setStatus(formatError(error), true);
+    }
+  }
+
+  await checkPageState();
+}
+
+async function applyCachedTranslation() {
+  elements.applyCacheButton.disabled = true;
+  setStatus("正在读取本地缓存…");
+  try {
+    const response = await sendToActiveTab({ type: "APPLY_PAGE_CACHE" });
+    const count = Number(response.appliedCount || 0);
+    setStatus(count ? `已从本地缓存显示 ${count} 处译文。` : "没有可用于当前页面的缓存。");
+    await checkPageState();
+  } catch (error) {
+    setStatus(formatError(error), true);
+  } finally {
+    elements.applyCacheButton.disabled = false;
   }
 }
 

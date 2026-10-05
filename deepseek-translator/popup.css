@@ -220,6 +220,12 @@ textarea:focus {
   font-size: 10px;
 }
 
+.footer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .realtime-control {
   position: relative;
   display: inline-flex;
@@ -265,6 +271,11 @@ textarea:focus {
 .realtime-input:checked + .switch-track { background: #1769e0; }
 .realtime-input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
 .realtime-input:focus-visible + .switch-track { box-shadow: 0 0 0 3px rgba(23, 105, 224, .18); }
+
+.cache-button {
+  width: 100%;
+  margin-top: 8px;
+}
 
 .status-text {
   min-height: 16px;
